@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>实时语音转写 (ASR)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #222222;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 800px;
+      width: 100%;
+    }
+
+    .title {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    .microphone-icon {
+      font-size: 4rem;
+      margin-bottom: 2rem;
+      opacity: 0.8;
+    }
+
+    .record-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 500;
+      padding: 15px 30px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      transition: all 0.3s ease;
+      margin-bottom: 1rem;
+    }
+
+    .record-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .record-button:active {
+      transform: translateY(0);
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: #ff4444;
+    }
+
+    .text-areas {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .text-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .text-area-label {
+      color: white;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .text-area-content {
+      background-color: white;
+      border-radius: 8px;
+      padding: 15px;
+      min-height: 120px;
+      color: #333;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      border: 1px solid #e0e0e0;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .footer {
+      margin-top: 2rem;
+      color: #888;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    @media (max-width: 768px) {
+      .text-areas {
+        flex-direction: column;
+      }
+
+      .title {
+        font-size: 2rem;
+      }
+
+      .microphone-icon {
+        font-size: 3rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1 class="title">实时语音转写 (ASR)</h1>
+
+    <div class="microphone-icon">🎤</div>
+
+    <button id="btn_control" class="record-button">
+      <span>🎤</span>
+      <span>开始录音</span>
+    </button>
+
+    <div class="status-indicator">
+      <div class="status-dot"></div>
+      <span>未连接</span>
+    </div>
+
+    <div class="text-areas">
+      <div class="text-area">
+        <div class="text-area-label">实时转写:</div>
+        <div class="text-area-content" id="realtime-result"></div>
+      </div>
+      <div class="text-area">
+        <div class="text-area-label">转写结果:</div>
+        <div class="text-area-content" id="result"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      基于科大讯飞实时语音转写API
+    </div>
+  </div>
+  <script>
+    var APPID = "fb75c27e";
+    var API_KEY = "59e8d4e6948955ee263b9b07839c454c";
+  </script>
+  <script src="../hmac-sha256.js"></script>
+  <script src="../HmacSHA1.js"></script>
+  <script src="../md5.js"></script>
+  <script src="../enc-base64-min.js"></script>
+  <script src="../../dist/index.umd.js"></script>
+  <script src="./index.js"></script>
+</body>
+
+</html>

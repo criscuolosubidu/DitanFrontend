@@ -710,6 +710,7 @@ export default {
 
     const connectWebSocket = () => {
       const websocketUrl = getWebSocketUrl()
+      console.log('🔌 开始连接WebSocket:', websocketUrl)
       
       if ('WebSocket' in window) {
         iatWS = new WebSocket(websocketUrl)
@@ -723,11 +724,27 @@ export default {
       changeBtnStatus('CONNECTING')
 
       iatWS.onopen = (e) => {
-        // 开始录音
-        recorder.start({
-          sampleRate: 16000,
-          frameSize: 1280,
-        })
+        console.log('✅ WebSocket连接成功')
+        // 检查recorder是否已初始化
+        if (!recorder) {
+          console.error('❌ RecorderManager未初始化')
+          alert('录音器未初始化，请刷新页面重试')
+          return
+        }
+        
+        try {
+          // 开始录音
+          console.log('🎤 开始启动录音...')
+          recorder.start({
+            sampleRate: 16000,
+            frameSize: 1280,
+          })
+          console.log('✅ 录音启动成功')
+        } catch (error) {
+          console.error('❌ 启动录音失败:', error)
+          alert('启动录音失败，请检查麦克风权限和worker文件是否加载成功')
+          iatWS.close()
+        }
       }
 
       iatWS.onmessage = (e) => {
@@ -735,13 +752,18 @@ export default {
       }
 
       iatWS.onerror = (e) => {
-        console.error(e)
-        recorder.stop()
+        console.error('❌ WebSocket错误:', e)
+        if (recorder) {
+          recorder.stop()
+        }
         changeBtnStatus('CLOSED')
       }
 
       iatWS.onclose = (e) => {
-        recorder.stop()
+        console.log('🔌 WebSocket连接关闭，代码:', e.code, '原因:', e.reason)
+        if (recorder) {
+          recorder.stop()
+        }
         changeBtnStatus('CLOSED')
       }
     }
@@ -1434,7 +1456,59 @@ export default {
       }
       
       // 初始化录音器
-      recorder = new RecorderManager('/dist')
+      // 在Vite中，public/目录下的文件在开发和生产环境都位于根路径
+      // processor.worker.js 和 processor.worklet.js 应该可以通过根路径访问
+      if (typeof RecorderManager === 'undefined') {
+        console.error('❌ RecorderManager未加载，请检查index.html中的script标签')
+        alert('录音管理器未加载，请刷新页面重试')
+        return
+      }
+      
+      // 根据环境动态确定processorPath
+      // processor.worker.js 在根目录 /processor.worker.js
+      // 根据README，如果访问地址 /a/b/c/processor.worker.js，则processorPath为 /a/b/c
+      // 因此如果文件在 /processor.worker.js，processorPath应该是 '/'
+      // 但从错误信息看，可能RecorderManager在构造Worker时路径处理有问题
+      // 尝试多种路径策略
+      
+      console.log('🎤 初始化RecorderManager')
+      console.log('📍 当前页面路径:', window.location.pathname)
+      console.log('📍 当前origin:', window.location.origin)
+      console.log('🔍 环境:', import.meta.env.MODE, '生产环境:', import.meta.env.PROD)
+      console.log('📦 RecorderManager版本/类型:', typeof RecorderManager)
+      
+      // 尝试多种路径策略
+      const pathOptions = [
+        { path: '', desc: '空字符串（当前目录）' },
+        { path: '.', desc: '当前目录（相对路径）' },
+        { path: '/', desc: '根目录（绝对路径）' }
+      ]
+      
+      let recorderInitialized = false
+      let lastError = null
+      
+      for (const option of pathOptions) {
+        try {
+          console.log(`🔄 尝试路径: "${option.path}" (${option.desc})`)
+          recorder = new RecorderManager(option.path)
+          console.log(`✅ 使用路径 "${option.path}" 初始化成功`)
+          console.log(`📂 processorPath: "${option.path}"`)
+          recorderInitialized = true
+          break
+        } catch (error) {
+          console.warn(`⚠️ 路径 "${option.path}" 失败:`, error.message)
+          lastError = error
+          // 继续尝试下一个路径
+        }
+      }
+      
+      if (!recorderInitialized) {
+        console.error('❌ 所有路径策略都失败了')
+        console.error('最后一个错误:', lastError)
+        console.error('错误详情:', lastError?.message)
+        console.error('错误堆栈:', lastError?.stack)
+        alert(`录音器初始化失败，请检查worker文件是否可访问。\n错误: ${lastError?.message || '未知错误'}`)
+      }
       
       // 添加测试数据（开发时使用）
       if (process.env.NODE_ENV === 'development') {
@@ -1463,20 +1537,34 @@ export default {
       }
       
       recorder.onStart = () => {
+        console.log('✅ 录音开始')
         changeBtnStatus('OPEN')
       }
 
       recorder.onFrameRecorded = ({ isLastFrame, frameBuffer }) => {
         if (iatWS && iatWS.readyState === iatWS.OPEN) {
-          iatWS.send(new Int8Array(frameBuffer))
-          if (isLastFrame) {
-            iatWS.send('{"end": true}')
-            changeBtnStatus('CLOSING')
+          try {
+            iatWS.send(new Int8Array(frameBuffer))
+            // 每100帧打印一次日志（避免日志过多）
+            if (Math.random() < 0.01) {
+              console.log('📤 发送音频帧，大小:', frameBuffer.byteLength, 'bytes')
+            }
+            if (isLastFrame) {
+              console.log('📤 发送最后一帧，准备结束')
+              iatWS.send('{"end": true}')
+              changeBtnStatus('CLOSING')
+            }
+          } catch (error) {
+            console.error('❌ 发送音频数据失败:', error)
+            recorder.stop()
           }
+        } else {
+          console.warn('⚠️ WebSocket未打开，无法发送音频数据。状态:', iatWS ? iatWS.readyState : '未初始化')
         }
       }
 
       recorder.onStop = () => {
+        console.log('🛑 录音停止')
         clearInterval(countdownInterval)
       }
     })

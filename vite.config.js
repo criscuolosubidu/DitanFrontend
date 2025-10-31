@@ -11,7 +11,7 @@ export default defineConfig({
       '/api': {
         target: 'https://www.universalfuture.online',
         changeOrigin: true, // 更改请求头中的origin
-        secure: false, // 暂时禁用SSL验证（证书过期问题）
+        //secure: false, // 暂时禁用SSL验证（证书过期问题）
         // 可选：重写路径
         // rewrite: (path) => path.replace(/^\/api/, '')
       }

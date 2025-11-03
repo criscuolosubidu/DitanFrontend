@@ -34,8 +34,8 @@
           <div class="patient-info">
             <div class="patient-name">{{ patient.name }}</div>
             <div class="patient-details">
-              <span class="patient-card">{{ patient.cardNumber }}</span>
-              <span class="patient-gender">{{ patient.gender }}</span>
+              <span v-if="patient.cardNumber && patient.cardNumber.trim()" class="patient-card">{{ patient.cardNumber }}</span>
+              <span v-if="formatGender(patient.gender)" class="patient-gender">{{ formatGender(patient.gender) }}</span>
             </div>
           </div>
           <div class="patient-actions">
@@ -1259,6 +1259,20 @@ export default {
       }
     }
 
+    // 格式化性别：将英文转换为中文，并去除空白字符
+    const formatGender = (gender) => {
+      if (!gender) return ''
+      // 去除前后空格
+      const trimmed = gender.trim().toUpperCase()
+      if (trimmed === 'MALE' || trimmed === 'M') {
+        return '男'
+      } else if (trimmed === 'FEMALE' || trimmed === 'F') {
+        return '女'
+      }
+      // 如果已经是中文或未知格式，去除空格后返回
+      return gender.trim()
+    }
+
     const selectPatient = (patient) => {
       selectedPatient.value = patient
       showPatientDetail.value = true
@@ -1618,6 +1632,7 @@ export default {
       selectedPatient,
       selectPatient,
       deletePatient,
+      formatGender,
       // 成功提示相关
       showSuccessToast,
       successMessage,

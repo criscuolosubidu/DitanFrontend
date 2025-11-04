@@ -254,7 +254,7 @@
       <button 
         @click="toggleRecording" 
         class="record-button"
-        :disabled="isConnecting"
+        :disabled="isConnecting || isAIRequesting"
       >
         <span>🎤</span>
         <span>{{ buttonText }}</span>
@@ -1021,6 +1021,8 @@ export default {
       
       // 不再显示底部面板，tab已移到上方主内容区域
       // showAIDiagnosisModal.value = true
+      // 点击AI诊断后，自动切换到"基本信息"tab
+      activeTab.value = 'basic'
       isAIRequesting.value = true
       aiDiagnosisResult.value = ''
       aiDiagnosisError.value = ''
@@ -1069,10 +1071,7 @@ export default {
         }
       } finally {
         isAIRequesting.value = false
-        // AI诊断完成后，自动切换到"基本信息"tab
-        if (!aiDiagnosisError.value && (aiDiagnosisResult.value || aiDiagnosisParsed.value)) {
-          activeTab.value = 'basic'
-        }
+        // 已经在点击时切换到"基本信息"tab，这里不需要再次切换
       }
     }
 
@@ -1151,7 +1150,18 @@ export default {
               
               // 如果解析成功，添加到患者列表并停止扫描
               if (parsedQRData.value && parsedQRData.value.name) {
+                // 先添加到患者列表（即使没有record_id）
                 addPatient(parsedQRData.value)
+                
+                // 保存刚添加的患者引用，用于后续更新
+                const addedPatient = selectedPatient.value
+                
+                // 如果二维码中有手机号，自动用手机号查询获取record_id
+                if (parsedQRData.value.phone) {
+                  console.log('📱 检测到手机号，自动查询患者信息以获取record_id:', parsedQRData.value.phone)
+                  // 自动查询患者信息，传入刚添加的患者引用
+                  queryPatientByPhoneFromQR(parsedQRData.value.phone, addedPatient)
+                }
                 
                 // 停止扫描器
                 if (qrScanner) {
@@ -1313,6 +1323,84 @@ export default {
         }
       } finally {
         isQuerying.value = false
+      }
+    }
+
+    // 从二维码扫描后自动查询患者信息（用于获取record_id）
+    const queryPatientByPhoneFromQR = async (phone, patientToUpdate = null) => {
+      if (!phone || phone.length !== 11) {
+        console.warn('⚠️ 无效的手机号，无法查询:', phone)
+        return
+      }
+
+      try {
+        console.log('📱 自动查询患者信息，手机号:', phone)
+        const response = await queryPatientAPI({ phone })
+        console.log('📱 自动查询结果:', response.data)
+        
+        // 检查响应是否成功
+        const isSuccess = response.data && (
+          response.data.success === true || 
+          response.data.code === 200 ||
+          response.status === 200 ||
+          (response.data.data && Object.keys(response.data.data).length > 0)
+        )
+        
+        if (isSuccess) {
+          const data = response.data.data || response.data
+          
+          // 从返回的数据结构中提取患者信息
+          const patientInfo = data.patient || data
+          
+          // 从medical_records数组中提取record_id（注意：是一个数组）
+          let recordId = null
+          if (data.medical_records && Array.isArray(data.medical_records) && data.medical_records.length > 0) {
+            recordId = data.medical_records[0].record_id
+            console.log('✅ 从medical_records中提取record_id:', recordId)
+          }
+          
+          // 确定要更新的患者：优先使用传入的患者引用，否则使用当前选中的患者
+          const targetPatient = patientToUpdate || (selectedPatient.value && selectedPatient.value.phone === phone ? selectedPatient.value : null)
+          
+          if (targetPatient) {
+            // 更新患者信息（特别是record_id）
+            if (recordId) {
+              targetPatient.recordId = recordId
+              console.log('✅ 已更新患者的record_id:', recordId)
+              
+              // 如果获取到record_id，自动获取预问诊数据
+              fetchPreConsultationData(recordId)
+            } else {
+              console.warn('⚠️ 未找到record_id字段')
+            }
+            
+            // 同时更新患者列表中的患者信息
+            const patientInList = patientList.value.find(p => p.phone === phone || (p.id && targetPatient.id && p.id === targetPatient.id))
+            if (patientInList) {
+              if (recordId) {
+                patientInList.recordId = recordId
+              }
+              // 更新其他信息
+              Object.assign(patientInList, {
+                cardNumber: patientInfo.cardNumber || patientInfo.card || patientInList.cardNumber || '',
+                name: patientInfo.name || patientInList.name || '',
+                gender: patientInfo.sex || patientInfo.gender || patientInList.gender || '',
+                birthDate: patientInfo.birthday || patientInfo.birthDate || patientInList.birthDate || '',
+                height: patientInfo.height || patientInList.height || '',
+                weight: patientInfo.weight || patientInList.weight || '',
+                target: patientInfo.target || patientInList.target || '',
+                healthIndex: patientInfo.healthIndex || patientInfo.health || patientInList.healthIndex || ''
+              })
+            }
+          } else {
+            console.warn('⚠️ 未找到要更新的患者')
+          }
+        } else {
+          console.warn('⚠️ 查询患者信息失败，响应不成功')
+        }
+      } catch (error) {
+        console.error('❌ 自动查询患者信息失败:', error)
+        // 静默失败，不显示错误提示给用户
       }
     }
 
@@ -2050,6 +2138,9 @@ export default {
 .record-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  background: #e0e0e0 !important; /* 禁用时背景变灰 */
+  border-color: #b0b0b0 !important; /* 禁用时边框变灰 */
+  color: #888888 !important; /* 禁用时文字变灰 */
 }
 
 /* 输入手机号按钮样式 */
@@ -2180,7 +2271,9 @@ export default {
   background-color: white;
   border-radius: 8px;
   padding: 15px;
+  height: 150px; /* 固定高度，确保两个框高度一致 */
   min-height: 120px;
+  max-height: 150px; /* 最大高度限制 */
   color: #333;
   font-size: 0.9rem;
   line-height: 1.5;
@@ -2188,11 +2281,18 @@ export default {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
+  overflow-y: auto; /* 内容超出时显示垂直滚动条 */
+  overflow-x: hidden; /* 隐藏水平滚动条 */
 }
 
 @media (max-width: 768px) {
   .text-areas {
     flex-direction: column;
+  }
+  
+  .text-area-content {
+    height: 120px; /* 移动端固定高度 */
+    max-height: 120px;
   }
 }
 
@@ -3653,6 +3753,8 @@ export default {
   font-size: 0.95rem;
   line-height: 1.8;
   word-wrap: break-word;
+  padding-left: 16px; /* 增加左侧padding，让内容往右移动，避免在平板上超出内容区域 */
+  padding-right: 16px; /* 保持右侧对称 */
 }
 
 .markdown-content h1,
@@ -3690,7 +3792,7 @@ export default {
 .markdown-content ul,
 .markdown-content ol {
   margin: 0.8em 0;
-  padding-left: 2em;
+  padding-left: 2.5em; /* 增加列表左侧padding，确保圆点和数据不会超出内容区域 */
 }
 
 .markdown-content li {

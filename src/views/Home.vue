@@ -1,4 +1,4 @@
- <template>
+<template>
   <div class="app">
     <!-- 左侧患者列表 -->
     <div class="patient-sidebar">
@@ -55,11 +55,9 @@
           <div class="empty-hint">扫描二维码添加患者</div>
         </div>
       </div>
-    </div>
-
-    <!-- 主内容区域 -->
-    <div class="main-content">
-      <div class="container">
+      
+      <!-- 底部按钮区域 -->
+      <div class="sidebar-footer-buttons">
         <!-- 扫描二维码按钮 -->
         <button 
           @click="startQRScan" 
@@ -68,15 +66,6 @@
         >
           <span>📱</span>
           <span>{{ qrButtonText }}</span>
-        </button>
-
-        <button 
-          @click="toggleRecording" 
-          class="record-button"
-          :disabled="isConnecting"
-        >
-          <span>🎤</span>
-          <span>{{ buttonText }}</span>
         </button>
 
         <!-- 输入手机号查询按钮 -->
@@ -88,12 +77,188 @@
           <span>📞</span>
           <span>{{ phoneButtonText }}</span>
         </button>
+      </div>
+    </div>
 
-        <div class="status-indicator">
-          <div class="status-dot" :class="statusDotClass"></div>
-          <span>{{ statusText }}</span>
+    <!-- 主内容区域 -->
+    <div class="main-content">
+      <div class="tab-container">
+        <!-- Tab导航栏 -->
+        <div class="tab-nav">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            class="tab-button"
+            :class="{ active: activeTab === tab.id }"
+            @click="activeTab = tab.id"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+        
+        <!-- Tab内容区域 -->
+        <div class="tab-content">
+          <!-- 预问诊数据Tab -->
+          <div v-if="activeTab === 'pre-consultation'" class="tab-panel">
+            <div class="pre-consultation-content">
+              <!-- 如果没有选中患者 -->
+              <div v-if="!selectedPatient" class="empty-state-message">
+                <p>请先选择或添加患者</p>
+              </div>
+              
+              <!-- 如果患者没有recordId -->
+              <div v-else-if="!selectedPatient.recordId" class="empty-state-message">
+                <p>该患者缺少就诊记录ID（record_id），无法获取预问诊数据</p>
+              </div>
+              
+              <!-- 如果有选中患者且有recordId -->
+              <div v-else>
+                <!-- 加载状态 -->
+                <div v-if="preConsultationLoading[selectedPatient.recordId]" class="loading-container">
+                  <div class="spinner"></div>
+                  <p>正在加载预问诊数据，请稍候...</p>
+                </div>
+                
+                <!-- 错误状态 -->
+                <div v-else-if="preConsultationError[selectedPatient.recordId]" class="error-container">
+                  <div class="error-icon">❌</div>
+                  <div class="error-message">{{ preConsultationError[selectedPatient.recordId] }}</div>
+                </div>
+                
+                <!-- 数据展示 -->
+                <div v-else-if="preConsultationData[selectedPatient.recordId]" class="pre-consultation-data">
+                  <div class="pre-consultation-text">{{ preConsultationData[selectedPatient.recordId] }}</div>
+                </div>
+                
+                <!-- 暂无数据 -->
+                <div v-else class="empty-state-message">
+                  <p>暂无预问诊数据</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 基本信息Tab -->
+          <div v-if="activeTab === 'basic'" class="tab-panel">
+            <div v-if="isAIRequesting" class="loading-container">
+              <div class="spinner"></div>
+              <p>AI正在分析中，请稍候...</p>
+            </div>
+            
+            <div v-else-if="aiDiagnosisError" class="error-container">
+              <div class="error-icon">❌</div>
+              <div class="error-message">{{ aiDiagnosisError }}</div>
+            </div>
+            
+            <div v-else>
+              <div v-if="aiDiagnosisParsed?.formattedMedicalRecord" class="diagnosis-result">
+                <h4>病历整理</h4>
+                <div style="white-space:pre-wrap;">{{ aiDiagnosisParsed.formattedMedicalRecord }}</div>
+              </div>
+              <div v-else-if="aiDiagnosisResult" class="diagnosis-result">
+                <div class="result-content">{{ aiDiagnosisResult }}</div>
+              </div>
+              <div v-else class="diagnosis-result">
+                <div>暂无诊断信息，请先进行AI诊断。</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 中医诊断Tab -->
+          <div v-if="activeTab === 'diagnosis'" class="tab-panel">
+            <div v-if="isAIRequesting" class="loading-container">
+              <div class="spinner"></div>
+              <p>AI正在分析中，请稍候...</p>
+            </div>
+            
+            <div v-else-if="aiDiagnosisError" class="error-container">
+              <div class="error-icon">❌</div>
+              <div class="error-message">{{ aiDiagnosisError }}</div>
+            </div>
+            
+            <div v-else>
+              <div v-if="aiDiagnosisParsed?.typeInference || aiDiagnosisParsed?.treatment">
+                <div v-if="aiDiagnosisParsed?.typeInference" class="diagnosis-result">
+                  <h4>辨证思路</h4>
+                  <div>{{ aiDiagnosisParsed.typeInference }}</div>
+                </div>
+                <div v-if="aiDiagnosisParsed?.treatment" class="diagnosis-result" style="margin-top:16px;">
+                  <h4>治疗原则</h4>
+                  <div>{{ aiDiagnosisParsed.treatment }}</div>
+                </div>
+              </div>
+              <div v-else class="diagnosis-result">
+                <h4>辨证思路</h4>
+                <div>暂无相关诊断信息（病历信息不足或未解析到）。</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 处方结果Tab -->
+          <div v-if="activeTab === 'prescription'" class="tab-panel">
+            <div v-if="isAIRequesting" class="loading-container">
+              <div class="spinner"></div>
+              <p>AI正在分析中，请稍候...</p>
+            </div>
+            
+            <div v-else-if="aiDiagnosisError" class="error-container">
+              <div class="error-icon">❌</div>
+              <div class="error-message">{{ aiDiagnosisError }}</div>
+            </div>
+            
+            <div v-else>
+              <div class="diagnosis-result">
+                <h4>处方建议</h4>
+                <template v-if="aiDiagnosisParsed?.prescription && aiDiagnosisParsed.prescription.length">
+                  <ul style="padding-left:18px;margin:6px 0;">
+                    <li v-for="(item, idx) in aiDiagnosisParsed.prescription" :key="idx">{{ item }}</li>
+                  </ul>
+                </template>
+                <template v-else>
+                  <div>暂无处方建议。</div>
+                </template>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 分析结果Tab -->
+          <div v-if="activeTab === 'analysis'" class="tab-panel">
+            <div v-if="isAIRequesting" class="loading-container">
+              <div class="spinner"></div>
+              <p>AI正在分析中，请稍候...</p>
+            </div>
+            
+            <div v-else-if="aiDiagnosisError" class="error-container">
+              <div class="error-icon">❌</div>
+              <div class="error-message">{{ aiDiagnosisError }}</div>
+            </div>
+            
+            <div v-else>
+              <div class="diagnosis-result">
+                <h4>生活方式/运动处方</h4>
+                <template v-if="renderedExercisePrescription">
+                  <div class="markdown-content" v-html="renderedExercisePrescription"></div>
+                </template>
+                <template v-else>
+                  <div>暂无分析结果或运动建议。</div>
+                </template>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+
+    <!-- 转写面板占位区域（未显示面板时显示按钮） -->
+    <div v-if="!showModal" class="transcription-placeholder">
+      <button 
+        @click="toggleRecording" 
+        class="record-button"
+        :disabled="isConnecting"
+      >
+        <span>🎤</span>
+        <span>{{ buttonText }}</span>
+      </button>
     </div>
 
     <!-- 转写面板 -->
@@ -226,8 +391,8 @@
       </div>
     </div>
 
-    <!-- AI诊断结果底部栏 -->
-    <div v-if="showAIDiagnosisModal" class="ai-diagnosis-panel" :style="{ height: diagnosisPanelHeight + 'px' }">
+    <!-- AI诊断结果底部栏（已隐藏，tab已移到上方主内容区域） -->
+    <div v-if="false" class="ai-diagnosis-panel" :style="{ height: diagnosisPanelHeight + 'px' }">
       <div class="panel-resizer" @mousedown="startDiagnosisResize"></div>
       <div class="panel-header">
         <h3>AI诊断建议</h3>
@@ -268,22 +433,6 @@
             >
               {{ tab.label }}
             </button>
-          </div>
-          
-          <!-- 保存建议按钮 -->
-          <div class="save-diagnosis-section">
-            <button 
-              @click="saveDiagnosisSuggestion" 
-              class="save-diagnosis-button"
-              :disabled="!selectedPatient?.recordId || isSavingDiagnosis"
-            >
-              <span v-if="!isSavingDiagnosis">💾</span>
-              <span v-else class="spinner-small"></span>
-              <span>{{ isSavingDiagnosis ? '保存中...' : '保存建议' }}</span>
-            </button>
-            <div v-if="saveDiagnosisMessage" class="save-message" :class="saveDiagnosisMessageType">
-              {{ saveDiagnosisMessage }}
-            </div>
           </div>
           
           <!-- Tab内容 -->
@@ -441,8 +590,10 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import QrScanner from 'qr-scanner'
+import { marked } from 'marked'
 import { queryPatientByPhone as queryPatientAPI } from '../api/patient'
 import { getAIDiagnosis } from '../api/ai-diagnosis'
+import { getPreConsultationData } from '../api/pre-consultation'
 
 export default {
   name: 'Home',
@@ -480,6 +631,11 @@ export default {
     
     // 患者详情右侧边栏相关
     const showPatientDetail = ref(false) // 控制患者详情右侧边栏显示
+    
+    // 预问诊数据相关
+    const preConsultationData = ref({}) // 按record_id存储预问诊数据
+    const preConsultationLoading = ref({}) // 按record_id存储加载状态
+    const preConsultationError = ref({}) // 按record_id存储错误信息
     
     // 诊断建议保存相关
     const isSavingDiagnosis = ref(false) // 是否正在保存诊断建议
@@ -571,6 +727,34 @@ export default {
     
     // 用户信息相关
     const currentUser = ref('') // 当前用户名
+    
+    // Tab切换相关
+    const activeTab = ref('pre-consultation') // 当前选中的tab
+    const tabs = [
+      { id: 'pre-consultation', label: '预问诊数据' },
+      { id: 'basic', label: '基本信息' },
+      { id: 'diagnosis', label: '中医诊断' },
+      { id: 'prescription', label: '处方结果' },
+      { id: 'analysis', label: '分析结果' }
+    ]
+    
+    // 渲染运动处方为Markdown的计算属性
+    const renderedExercisePrescription = computed(() => {
+      if (!aiDiagnosisParsed.value?.exercisePrescription || !aiDiagnosisParsed.value.exercisePrescription.length) {
+        return ''
+      }
+      
+      // 将数组合并为字符串，用换行符连接
+      const markdownText = aiDiagnosisParsed.value.exercisePrescription.join('\n')
+      
+      try {
+        // 使用 marked 渲染 Markdown
+        return marked(markdownText)
+      } catch (error) {
+        console.error('Markdown渲染失败:', error)
+        return markdownText // 如果渲染失败，返回原始文本
+      }
+    })
     
     // 科大讯飞API配置
     const APPID = 'fb75c27e'
@@ -835,8 +1019,8 @@ export default {
         return
       }
       
-      // 显示弹窗
-      showAIDiagnosisModal.value = true
+      // 不再显示底部面板，tab已移到上方主内容区域
+      // showAIDiagnosisModal.value = true
       isAIRequesting.value = true
       aiDiagnosisResult.value = ''
       aiDiagnosisError.value = ''
@@ -885,6 +1069,10 @@ export default {
         }
       } finally {
         isAIRequesting.value = false
+        // AI诊断完成后，自动切换到"基本信息"tab
+        if (!aiDiagnosisError.value && (aiDiagnosisResult.value || aiDiagnosisParsed.value)) {
+          activeTab.value = 'basic'
+        }
       }
     }
 
@@ -1246,6 +1434,10 @@ export default {
         Object.assign(existingPatient, patientData)
         selectedPatient.value = existingPatient
         console.log('更新患者信息:', existingPatient)
+        // 如果患者有recordId，自动获取预问诊数据
+        if (existingPatient.recordId) {
+          fetchPreConsultationData(existingPatient.recordId)
+        }
       } else {
         // 如果不存在，添加新患者
         const newPatient = {
@@ -1256,6 +1448,10 @@ export default {
         patientList.value.unshift(newPatient) // 添加到列表开头
         selectedPatient.value = newPatient
         console.log('添加新患者:', newPatient)
+        // 如果患者有recordId，自动获取预问诊数据
+        if (newPatient.recordId) {
+          fetchPreConsultationData(newPatient.recordId)
+        }
       }
     }
 
@@ -1277,6 +1473,131 @@ export default {
       selectedPatient.value = patient
       showPatientDetail.value = true
       console.log('选中患者:', patient)
+      // 如果患者有recordId，自动获取预问诊数据
+      if (patient.recordId) {
+        fetchPreConsultationData(patient.recordId)
+      }
+    }
+
+    // 获取预问诊数据
+    const fetchPreConsultationData = async (recordId) => {
+      if (!recordId) {
+        console.warn('⚠️ 缺少recordId，无法获取预问诊数据')
+        return
+      }
+
+      // 如果已经加载过该患者的数据，不再重复加载
+      if (preConsultationData.value[recordId]) {
+        console.log('✅ 预问诊数据已存在，跳过加载:', recordId)
+        return
+      }
+
+      // 设置加载状态
+      preConsultationLoading.value[recordId] = true
+      preConsultationError.value[recordId] = ''
+
+      try {
+        console.log('📋 开始获取预问诊数据，recordId:', recordId)
+        const response = await getPreConsultationData(recordId)
+        
+        console.log('✅ 预问诊数据获取成功 - 完整response:', response)
+        console.log('✅ response.data:', response.data)
+        console.log('✅ response.data.data:', response.data?.data)
+        
+        // 打印 pre_diagnosis 对象的完整内容和所有键
+        const preDiagnosis = response.data?.data?.pre_diagnosis
+        console.log('✅ pre_diagnosis 对象:', preDiagnosis)
+        console.log('✅ pre_diagnosis 的所有键:', preDiagnosis ? Object.keys(preDiagnosis) : 'null')
+        
+        // 根据test.md，diagnosis_result 在 sanzhen_result 对象内
+        // 路径: response.data.data.pre_diagnosis.sanzhen_result.diagnosis_result
+        let sanzhenResult = preDiagnosis?.sanzhen_result
+        console.log('✅ sanzhen_result 原始值:', sanzhenResult)
+        console.log('✅ sanzhen_result 类型:', typeof sanzhenResult)
+        
+        // 如果 sanzhen_result 是字符串（JSON字符串），尝试解析
+        if (typeof sanzhenResult === 'string') {
+          try {
+            sanzhenResult = JSON.parse(sanzhenResult)
+            console.log('✅ 解析后的 sanzhen_result:', sanzhenResult)
+          } catch (e) {
+            console.warn('⚠️ 无法解析 sanzhen_result 为JSON:', e)
+          }
+        }
+        
+        console.log('✅ sanzhen_result 对象:', sanzhenResult)
+        console.log('✅ sanzhen_result 的所有键:', sanzhenResult && typeof sanzhenResult === 'object' ? Object.keys(sanzhenResult) : 'null')
+        
+        // 尝试多种可能的路径
+        let diagnosisResult = null
+        
+        // 路径1: response.data.data.pre_diagnosis.sanzhen_result.diagnosis_result (根据test.md的结构)
+        if (sanzhenResult && typeof sanzhenResult === 'object' && sanzhenResult.diagnosis_result !== undefined && sanzhenResult.diagnosis_result !== null) {
+          diagnosisResult = sanzhenResult.diagnosis_result
+          console.log('📋 使用路径1 (response.data.data.pre_diagnosis.sanzhen_result.diagnosis_result)')
+        }
+        // 路径2: response.data.data.pre_diagnosis.diagnosis_result (如果直接存在)
+        else if (preDiagnosis?.diagnosis_result !== undefined && preDiagnosis?.diagnosis_result !== null) {
+          diagnosisResult = preDiagnosis.diagnosis_result
+          console.log('📋 使用路径2 (response.data.data.pre_diagnosis.diagnosis_result)')
+        }
+        // 路径3: response.data.pre_diagnosis.diagnosis_result (如果API直接返回data字段的内容)
+        else if (response.data?.pre_diagnosis?.diagnosis_result !== undefined && response.data?.pre_diagnosis?.diagnosis_result !== null) {
+          diagnosisResult = response.data.pre_diagnosis.diagnosis_result
+          console.log('📋 使用路径3 (response.data.pre_diagnosis.diagnosis_result)')
+        }
+        else {
+          console.warn('⚠️ 无法找到 diagnosis_result 字段')
+          console.warn('⚠️ pre_diagnosis 的所有字段:', preDiagnosis ? Object.keys(preDiagnosis) : 'null')
+          console.warn('⚠️ sanzhen_result 的所有字段:', sanzhenResult && typeof sanzhenResult === 'object' ? Object.keys(sanzhenResult) : 'null')
+        }
+        
+        console.log('📋 最终提取的 diagnosis_result:', diagnosisResult)
+        console.log('📋 diagnosis_result 类型:', typeof diagnosisResult)
+        
+        // 处理 diagnosis_result：如果是对象，转换为字符串；如果是字符串，直接使用
+        let diagnosisResultText = ''
+        if (diagnosisResult) {
+          if (typeof diagnosisResult === 'string') {
+            diagnosisResultText = diagnosisResult
+          } else if (typeof diagnosisResult === 'object') {
+            // 如果是对象，尝试转换为格式化的字符串
+            diagnosisResultText = JSON.stringify(diagnosisResult, null, 2)
+          } else {
+            diagnosisResultText = String(diagnosisResult)
+          }
+        }
+        
+        console.log('📋 处理后的 diagnosis_result 文本:', diagnosisResultText)
+        
+        // 存储预问诊数据（只存储 diagnosis_result 字段的文本内容）
+        preConsultationData.value[recordId] = diagnosisResultText
+      } catch (error) {
+        console.error('❌ 获取预问诊数据失败:', error)
+        
+        // 存储错误信息
+        if (error.response) {
+          const status = error.response.status
+          const data = error.response.data
+          
+          if (status === 401) {
+            preConsultationError.value[recordId] = '认证失败，请重新登录'
+          } else if (status === 404) {
+            preConsultationError.value[recordId] = '未找到预问诊数据'
+          } else if (status === 500) {
+            preConsultationError.value[recordId] = '服务器错误，请稍后再试'
+          } else {
+            preConsultationError.value[recordId] = data?.message || `请求失败 (${status})`
+          }
+        } else if (error.request) {
+          preConsultationError.value[recordId] = '无法连接到服务器，请检查网络'
+        } else {
+          preConsultationError.value[recordId] = error.message || '获取预问诊数据失败'
+        }
+      } finally {
+        // 清除加载状态
+        preConsultationLoading.value[recordId] = false
+      }
     }
 
     const deletePatient = (patientId) => {
@@ -1664,7 +1985,16 @@ export default {
       diagnosisTabs,
       // 用户信息相关
       currentUser,
-      handleLogout
+      handleLogout,
+      // Tab切换相关
+      activeTab,
+      tabs,
+      renderedExercisePrescription,
+      // 预问诊数据相关
+      preConsultationData,
+      preConsultationLoading,
+      preConsultationError,
+      fetchPreConsultationData
     }
   }
 }
@@ -1866,11 +2196,25 @@ export default {
   }
 }
 
+/* 转写面板占位区域样式（未显示面板时显示按钮） */
+.transcription-placeholder {
+  position: fixed;
+  bottom: 0;
+  left: 300px; /* 从左侧边栏右边开始，不覆盖侧边栏 */
+  right: 0;
+  height: 35vh; /* 占据屏幕下方35%的高度 */
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50; /* 低于转写面板的z-index */
+}
+
 /* 转写面板样式 */
 .transcription-panel {
   position: fixed;
   bottom: 0;
-  left: 0;
+  left: 300px; /* 从左侧边栏右边开始，不覆盖侧边栏 */
   right: 0;
   height: 35vh; /* 占据屏幕下方35%的高度 */
   background: white;
@@ -2414,11 +2758,178 @@ export default {
   opacity: 0.7;
 }
 
+/* 侧边栏底部按钮区域 */
+.sidebar-footer-buttons {
+  padding: 15px;
+  border-top: 2px solid #E2E8F0;
+  background: #F8FAFC;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-footer-buttons .qr-button,
+.sidebar-footer-buttons .phone-button {
+  width: 100%;
+  margin-bottom: 0;
+}
+
 .main-content {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  height: calc(100vh - 35vh); /* 高度到转写面板占位区域为止 */
+  overflow: hidden;
+}
+
+/* Tab容器样式 */
+.tab-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Tab导航栏样式 */
+.tab-nav {
+  display: flex;
+  border-bottom: 2px solid #E2E8F0;
+  background: #F8FAFC;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tab-button {
+  width: 150px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #666;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.tab-button:hover {
+  background: #F1F5F9;
+  color: #2563EB;
+}
+
+.tab-button.active {
+  color: #2563EB;
+  border-bottom-color: #2563EB;
+  background: white;
+  font-weight: 600;
+}
+
+/* Tab内容区域样式 */
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 0 20px; /* 移除底部padding，让内容区域底部紧贴下边框上边缘 */
+  background: white;
+}
+
+.tab-panel {
+  height: 100%;
+}
+
+.pre-consultation-content {
+  height: 100%;
+}
+
+/* 预问诊数据展示样式 */
+.empty-state-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.pre-consultation-data {
+  width: 100%;
+  height: 100%;
+}
+
+.pre-consultation-text {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #333;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: calc(100vh - 35vh - 200px); /* 确保内容至少占满可用空间 */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 主内容区域中诊断相关的样式 */
+.tab-content .save-diagnosis-section {
+  margin-top: 20px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+.tab-content .save-diagnosis-button {
+  background: white;
+  border: 2px solid #059669;
+  border-radius: 6px;
+  color: #059669;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px 24px;
+  cursor: pointer;
+  display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.1);
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.tab-content .save-diagnosis-button:hover:not(:disabled) {
+  background: #059669;
+  color: white;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.2);
+}
+
+.tab-content .save-diagnosis-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.tab-content .save-message {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.tab-content .save-message.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.tab-content .save-message.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
 
 /* 成功提示样式 */
@@ -2861,7 +3372,7 @@ export default {
 .ai-diagnosis-panel {
   position: fixed;
   bottom: 0;
-  left: 0;
+  left: 300px; /* 从左侧边栏右边开始，不覆盖侧边栏 */
   right: 0;
   background: white;
   border-top: 3px solid #667eea;
@@ -3136,6 +3647,93 @@ export default {
   word-wrap: break-word;
 }
 
+/* Markdown 渲染内容样式 */
+.markdown-content {
+  color: #333;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  word-wrap: break-word;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.markdown-content h1 {
+  font-size: 1.5em;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0.5em;
+}
+
+.markdown-content h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 0.3em;
+}
+
+.markdown-content h3 {
+  font-size: 1.1em;
+}
+
+.markdown-content p {
+  margin: 0.8em 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.8em 0;
+  padding-left: 2em;
+}
+
+.markdown-content li {
+  margin: 0.4em 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content code {
+  background-color: #f4f4f4;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background-color: #f4f4f4;
+  padding: 1em;
+  border-radius: 5px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #ddd;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #666;
+}
+
 .error-container {
   display: flex;
   flex-direction: column;
@@ -3183,7 +3781,30 @@ export default {
   
   .main-content {
     flex: 1;
-    min-height: calc(100vh - 200px);
+    height: calc(100vh - 200px - 35vh); /* 移动端调整高度 */
+  }
+  
+  .tab-button {
+    width: auto;
+    min-width: 120px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+  
+  .tab-content {
+    padding: 15px;
+  }
+  
+  .transcription-placeholder {
+    left: 0; /* 移动端侧边栏为全宽，占位区域也全宽显示 */
+  }
+  
+  .transcription-panel {
+    left: 0; /* 移动端侧边栏为全宽，转写面板也全宽显示 */
+  }
+  
+  .ai-diagnosis-panel {
+    left: 0; /* 移动端侧边栏为全宽，AI诊断面板也全宽显示 */
   }
 }
 </style>

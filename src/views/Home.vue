@@ -138,7 +138,7 @@
             </div>
           </div>
           
-          <!-- 基本信息Tab -->
+          <!-- 患者病历Tab -->
           <div v-if="activeTab === 'basic'" class="tab-panel">
             <div v-if="isAIRequesting" class="loading-container">
               <div class="spinner"></div>
@@ -437,7 +437,7 @@
           
           <!-- Tab内容 -->
           <div class="tab-content">
-            <!-- 基本信息Tab -->
+            <!-- 患者病历Tab -->
             <div v-if="currentDiagnosisTab === 'basic'" class="tab-panel">
               <div v-if="aiDiagnosisParsed?.formattedMedicalRecord" class="diagnosis-result">
                 <h4>病历整理</h4>
@@ -655,10 +655,10 @@ export default {
     let diagnosisResizeStartY = 0
     let diagnosisResizeStartHeight = 0
     const diagnosisTabs = [
-      { id: 'basic', label: '基本信息' },
+      { id: 'basic', label: '患者病历' },
       { id: 'diagnosis', label: '中医诊断' },
       { id: 'prescription', label: '处方结果' },
-      { id: 'analysis', label: '分析结果' }
+      { id: 'analysis', label: '运动处方' }
     ]
     // 解析与归一化AI诊断结果
     const parseAIDiagnosis = (data) => {
@@ -732,10 +732,10 @@ export default {
     const activeTab = ref('pre-consultation') // 当前选中的tab
     const tabs = [
       { id: 'pre-consultation', label: '预问诊数据' },
-      { id: 'basic', label: '基本信息' },
+      { id: 'basic', label: '患者病历' },
       { id: 'diagnosis', label: '中医诊断' },
       { id: 'prescription', label: '处方结果' },
-      { id: 'analysis', label: '分析结果' }
+      { id: 'analysis', label: '运动处方' }
     ]
     
     // 渲染运动处方为Markdown的计算属性
@@ -1021,7 +1021,7 @@ export default {
       
       // 不再显示底部面板，tab已移到上方主内容区域
       // showAIDiagnosisModal.value = true
-      // 点击AI诊断后，自动切换到"基本信息"tab
+      // 点击AI诊断后，自动切换到"患者病历"tab
       activeTab.value = 'basic'
       isAIRequesting.value = true
       aiDiagnosisResult.value = ''
@@ -1071,7 +1071,7 @@ export default {
         }
       } finally {
         isAIRequesting.value = false
-        // 已经在点击时切换到"基本信息"tab，这里不需要再次切换
+        // 已经在点击时切换到"患者病历"tab，这里不需要再次切换
       }
     }
 
